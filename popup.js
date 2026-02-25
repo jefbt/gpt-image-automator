@@ -4,9 +4,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const outputFolder = document.getElementById('outputFolder');
     const isVariation = document.getElementById('isVariation');
     const generateAgainPrompt = document.getElementById('generateAgainPrompt');
+    const waitTime = document.getElementById('waitTime');
     const dropZone = document.getElementById('dropZone');
     const dragOverlay = document.getElementById('dragOverlay');
     const logArea = document.getElementById('logArea');
+    const countdownDisplay = document.getElementById('countdownDisplay');
 
     // Logging utility
     function addLog(message, type = 'info') {
@@ -18,10 +20,17 @@ document.addEventListener('DOMContentLoaded', () => {
         logArea.scrollTop = logArea.scrollHeight; // Auto-scroll to bottom
     }
 
-    // Listen for log messages from background or content scripts
+    // Listen for log messages and UI updates from background or content scripts
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (request.action === "LOG") {
             addLog(request.message, request.type);
+        } else if (request.action === "UPDATE_COUNTDOWN") {
+            if (request.text) {
+                countdownDisplay.textContent = request.text;
+                countdownDisplay.style.display = 'inline';
+            } else {
+                countdownDisplay.style.display = 'none';
+            }
         }
     });
 
@@ -31,10 +40,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Load saved state
-    chrome.storage.local.get(['savedPrompts', 'savedFolder', 'savedGenAgain'], (data) => {
+    chrome.storage.local.get(['savedPrompts', 'savedFolder', 'savedGenAgain', 'savedWaitTime'], (data) => {
         if (data.savedPrompts) imagePrompts.value = data.savedPrompts;
         if (data.savedFolder) outputFolder.value = data.savedFolder;
         if (data.savedGenAgain) generateAgainPrompt.value = data.savedGenAgain;
+        if (data.savedWaitTime !== undefined) waitTime.value = data.savedWaitTime;
         addLog("Ready. Awaiting commands.", "info");
     });
 
@@ -43,11 +53,14 @@ document.addEventListener('DOMContentLoaded', () => {
         chrome.storage.local.set({
             savedPrompts: imagePrompts.value,
             savedFolder: outputFolder.value,
-            savedGenAgain: generateAgainPrompt.value
+            savedGenAgain: generateAgainPrompt.value,
+            savedWaitTime: waitTime.value
         });
     };
     imagePrompts.addEventListener('input', saveState);
     outputFolder.addEventListener('input', saveState);
+    generateAgainPrompt.addEventListener('input', saveState);
+    waitTime.addEventListener('input', saveState);
     
     // Auto-format pasted paths to be relative to Downloads
     outputFolder.addEventListener('paste', (e) => {
@@ -76,8 +89,6 @@ document.addEventListener('DOMContentLoaded', () => {
             addLog(`Pasted path auto-formatted to relative folder: "${relativePath || 'Root'}"`, "info");
         }
     });
-
-    generateAgainPrompt.addEventListener('input', saveState);
 
     // --- Folder Picker Button ---
     document.getElementById('browseFolderBtn').addEventListener('click', async () => {
@@ -181,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         imagePrompts.value += configLine;
         
-        startNumber.value = parseInt(startNumber.value) + 1;
+        // Start number is no longer auto-incremented here
         saveState();
         addLog(`Added config header: ${configLine.trim()}`, "info");
     });
@@ -216,7 +227,8 @@ document.addEventListener('DOMContentLoaded', () => {
             chrome.tabs.sendMessage(targetTab.id, {
                 action: "START_AUTOMATION",
                 prompts: imagePrompts.value,
-                generateAgainText: generateAgainPrompt.value
+                generateAgainText: generateAgainPrompt.value,
+                waitTime: parseInt(waitTime.value, 10) || 0
             }).catch((err) => {
                 // This catches the "Receiving end does not exist" error
                 addLog("Connection failed. Please REFRESH your ChatGPT tab and try again.", "error");

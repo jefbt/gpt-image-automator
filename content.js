@@ -10,6 +10,12 @@ function sendLog(message, type = 'info') {
     } catch (e) {}
 }
 
+function updateCountdownUI(text) {
+    try {
+        chrome.runtime.sendMessage({ action: "UPDATE_COUNTDOWN", text: text }).catch(() => {});
+    } catch (e) {}
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "START_AUTOMATION") {
         if (isRunning) {
@@ -18,11 +24,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
         isRunning = true;
         usedPrompts.clear();
-        processPrompts(request.prompts, request.generateAgainText);
+        processPrompts(request.prompts, request.generateAgainText, request.waitTime);
     }
 });
 
-async function processPrompts(promptsText, generateAgainText) {
+async function processPrompts(promptsText, generateAgainText, waitTimeSeconds) {
     const lines = promptsText.split(/\r?\n/);
     let currentPrefix = "00001";
     let currentFolder = "AI_Images";
@@ -30,7 +36,7 @@ async function processPrompts(promptsText, generateAgainText) {
     let totalPrompts = lines.filter(l => l.trim() && !l.trim().startsWith('#####')).length;
     let currentPromptIndex = 0;
 
-    sendLog(`Starting automation. Found ${totalPrompts} prompts to process.`, "info");
+    sendLog(`Starting automation. Found ${totalPrompts} prompts to process. Wait time is ${waitTimeSeconds}s.`, "info");
 
     for (let i = 0; i < lines.length; i++) {
         let line = lines[i].trim();
@@ -83,18 +89,33 @@ async function processPrompts(promptsText, generateAgainText) {
                 filename: filename
             });
             
-            // Auto-increment the prefix
-            currentPrefix = String(parseInt(currentPrefix) + 1).padStart(5, '0');
+            // Prefix auto-increment removed here as requested. 
+            // It will remain the same until a new ##### config line is encountered.
         } else {
             sendLog("Timeout or failed to find the generated image. Proceeding to next prompt.", "error");
         }
 
-        // Small delay between prompts to be safe
-        sendLog("Waiting 2 seconds before next prompt...", "info");
-        await new Promise(r => setTimeout(r, 2000));
+        // Check if there are more valid prompts left to process before initiating the wait timer
+        const hasMorePrompts = lines.slice(i + 1).some(l => l.trim() && !l.trim().startsWith('#####'));
+
+        if (hasMorePrompts) {
+            if (waitTimeSeconds > 0) {
+                sendLog(`Waiting ${waitTimeSeconds} seconds before sending the next prompt...`, "info");
+                for (let w = waitTimeSeconds; w > 0; w--) {
+                    if (!isRunning) break;
+                    updateCountdownUI(`Next in: ${w}s`);
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+                updateCountdownUI(""); // Clear UI after countdown
+            } else {
+                // If wait time is 0, just do a tiny safety buffer
+                await new Promise(r => setTimeout(r, 2000));
+            }
+        }
     }
 
     isRunning = false;
+    updateCountdownUI("");
     sendLog("Automation routine finished completely.", "success");
     alert("Image Auto-Generation Complete!");
 }
