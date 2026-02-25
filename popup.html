@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatGPT Auto Image Generator</title>
+    <style>
+        :root {
+            --bg-color: #1e1e1e;
+            --panel-bg: #2a2a2a;
+            --log-bg: #111111;
+            --text-color: #f0f0f0;
+            --border-color: #444;
+            --accent-color: #10a37f;
+            --accent-hover: #0e8c6d;
+            --danger-color: #ef4444;
+            --danger-hover: #dc2626;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: system-ui, -apple-system, sans-serif;
+            width: 100%;
+            height: 100vh;
+            margin: 0;
+            padding: 16px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+        h2 { margin-top: 0; font-size: 18px; margin-bottom: 12px; }
+        .form-group { margin-bottom: 12px; }
+        label { display: block; font-size: 12px; margin-bottom: 4px; color: #aaa; }
+        input[type="text"], input[type="number"], textarea {
+            width: 100%;
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 8px;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+        textarea {
+            height: 120px;
+            resize: vertical;
+        }
+        .textarea-container { position: relative; }
+        .drag-overlay {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(16, 163, 127, 0.2);
+            border: 2px dashed var(--accent-color);
+            border-radius: 6px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+        .row {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+            margin-bottom: 12px;
+        }
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            height: 35px;
+        }
+        button {
+            background-color: var(--panel-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        button:hover { background-color: #3a3a3a; }
+        .btn-primary {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            width: 100%;
+            padding: 10px;
+            font-size: 14px;
+            margin-top: 8px;
+        }
+        .btn-primary:hover { background-color: var(--accent-hover); }
+        .btn-danger { color: #ff8a8a; border-color: #ff8a8a; }
+        .btn-danger:hover { background-color: rgba(255, 138, 138, 0.1); }
+        .flex-1 { flex: 1; }
+        
+        /* Log Area Styles */
+        .log-container {
+            margin-top: 16px;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 150px;
+        }
+        .log-header {
+            font-size: 12px;
+            color: #aaa;
+            margin-bottom: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .log-area {
+            flex-grow: 1;
+            background-color: var(--log-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 8px;
+            overflow-y: auto;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+        .log-entry { margin-bottom: 4px; word-wrap: break-word; }
+        .log-info { color: #ccc; }
+        .log-warn { color: #fbbf24; }
+        .log-error { color: #ef4444; }
+        .log-success { color: #10b981; }
+        .clear-logs { cursor: pointer; color: var(--accent-color); }
+        .clear-logs:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <h2>Auto Image Generator</h2>
+    
+    <div class="form-group">
+        <label for="imagePrompts">Image Prompts (Type or Drag & Drop .txt / .md files)</label>
+        <div class="textarea-container" id="dropZone">
+            <textarea id="imagePrompts" placeholder="Enter prompts here..."></textarea>
+            <div class="drag-overlay" id="dragOverlay">Drop file to load</div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div style="width: 80px;">
+            <label for="startNumber">Start Num</label>
+            <input type="number" id="startNumber" value="1" min="1">
+        </div>
+        <div class="flex-1">
+            <label for="outputFolder">Output Folder (Downloads Subfolder)</label>
+            <input type="text" id="outputFolder" placeholder="e.g. AI_Images">
+        </div>
+        <label class="checkbox-container">
+            <input type="checkbox" id="isVariation">
+            Is Variation
+        </label>
+        <button id="addToListBtn" title="Add configuration line to list">Add to List</button>
+    </div>
+
+    <div class="form-group">
+        <label for="generateAgainPrompt">Generate Again Prompt (Appended to repeated prompts)</label>
+        <input type="text" id="generateAgainPrompt" value=" (If you would generate the same image you already generated with this prompt, please, generate a different image, but still using...">
+    </div>
+
+    <div class="row" style="justify-content: space-between; margin-bottom: 0;">
+        <button id="clearListBtn" class="btn-danger">Clear List</button>
+        <button id="startAutomationBtn" class="btn-primary" style="width: auto; margin: 0; flex: 1; margin-left: 8px;">Start Generation on ChatGPT</button>
+    </div>
+
+    <div class="log-container">
+        <div class="log-header">
+            <span>Execution Logs</span>
+            <span class="clear-logs" id="clearLogsBtn">Clear Logs</span>
+        </div>
+        <div class="log-area" id="logArea"></div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
