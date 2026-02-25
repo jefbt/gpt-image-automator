@@ -230,7 +230,6 @@ async function waitForGenerationAndGetImage(initialTurnCount) {
         let checkInterval;
         let timeout;
         let finishedTime = null;
-        let loggedWait = false;
 
         const cleanup = () => {
             clearInterval(checkInterval);
@@ -253,64 +252,60 @@ async function waitForGenerationAndGetImage(initialTurnCount) {
 
             const lastTurn = assistantTurns[assistantTurns.length - 1];
             
-            // 1. Check for the image FIRST, regardless of copy button
-            const allImages = Array.from(lastTurn.querySelectorAll('img'));
-            const generatedImages = allImages.filter(img => {
-                const src = (img.src || '').toLowerCase();
-                const alt = (img.alt || '').toLowerCase();
-                
-                // Robust DALL-E / Estuary image checking including localized text
-                if (src.includes('oaiusercontent.com') || src.includes('dall-e') || src.includes('estuary')) return true;
-                if (alt.includes('generated') || alt.includes('dall·e') || alt.includes('gerada') || alt.includes('criada')) return true;
-                
-                // Fallback: If it's a large image and not an avatar/UI icon
-                if (img.width >= 200 && !src.includes('profile') && !src.includes('avatar') && !src.includes('favicon')) {
-                    return true;
-                }
-                return false;
-            });
-
-            if (generatedImages.length > 0) {
-                // Image found! Give the browser 1 second to fully process the src URL internally, then resolve
-                cleanup();
-                setTimeout(() => {
-                    resolve({ status: 'success', url: generatedImages[generatedImages.length - 1].src });
-                }, 1000);
-                return;
-            }
-
-            // 2. If no image is found yet, check if ChatGPT says generation is "finished"
             const copyBtn = lastTurn.querySelector('button[data-testid="copy-turn-action-button"]');
             const stopBtn = document.querySelector('button[data-testid="stop-button"]');
             
+            // Only begin evaluating images AFTER ChatGPT says generation is "finished"
             const isFinished = copyBtn && !stopBtn;
 
             if (isFinished) {
                 if (!finishedTime) {
-                    // Start the 15-second grace period timer
                     finishedTime = Date.now();
-                } else {
-                    const elapsed = Date.now() - finishedTime;
+                    sendLog("Response complete. Waiting 4s for image transitions and overlays to clear...", "info");
+                }
+
+                const elapsed = Date.now() - finishedTime;
+
+                // Force a 4-second grace period for the white overlay to vanish and the high-res image to load
+                if (elapsed >= 4000) {
+                    cleanup();
                     
-                    if (!loggedWait && elapsed > 2000) {
-                        sendLog("Text finished, waiting up to 15s for image to render...", "info");
-                        loggedWait = true;
+                    const allImages = Array.from(lastTurn.querySelectorAll('img'));
+                    let bestImgUrl = null;
+
+                    for (let img of allImages) {
+                        const src = (img.src || '').toLowerCase();
+                        const alt = (img.alt || '').toLowerCase();
+                        
+                        // Skip small avatars and UI icons
+                        if (src.includes('profile') || src.includes('avatar') || src.includes('favicon') || img.width < 100) continue;
+                        
+                        // CRITICAL FIX: Skip the blurred background elements
+                        if (img.closest('.blur-2xl')) continue;
+
+                        // CRITICAL FIX: Skip hidden crossfade elements (opacity 0.01)
+                        if (img.style.opacity === '0.01' || img.style.opacity === '0') continue;
+
+                        // Must match generated image signatures
+                        if (src.includes('oaiusercontent.com') || src.includes('dall-e') || src.includes('estuary') || 
+                            alt.includes('generated') || alt.includes('dall·e') || alt.includes('gerada') || alt.includes('criada')) {
+                            bestImgUrl = img.src; 
+                        }
                     }
 
-                    if (elapsed > 15000) {
-                        // We waited 15 seconds after the UI said it was finished, but no image ever rendered.
-                        // It was likely a text-only response or a rate limit message.
-                        cleanup();
+                    if (bestImgUrl) {
+                        resolve({ status: 'success', url: bestImgUrl });
+                    } else {
+                        // We waited 4 seconds after finishing, but no image was found.
+                        // It must be a text-only response (like an error message or rate limit)
                         let gptTextMsg = lastTurn.innerText.trim();
                         if (!gptTextMsg) gptTextMsg = "Empty response or unknown error.";
-                        
                         resolve({ status: 'error', message: gptTextMsg });
                     }
                 }
             } else {
-                // If it starts generating again, reset the timer
+                // If it starts generating again (e.g., multi-step process), reset the stabilization timer
                 finishedTime = null;
-                loggedWait = false;
             }
         }, 1000); // Check every 1 second
     });
