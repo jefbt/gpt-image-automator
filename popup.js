@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const dragOverlay = document.getElementById('dragOverlay');
     const logArea = document.getElementById('logArea');
     const countdownDisplay = document.getElementById('countdownDisplay');
+    const wordWrapCheck = document.getElementById('wordWrapCheck');
 
     // Logging utility
     function addLog(message, type = 'info') {
@@ -40,11 +41,20 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Load saved state
-    chrome.storage.local.get(['savedPrompts', 'savedFolder', 'savedGenAgain', 'savedWaitTime'], (data) => {
+    chrome.storage.local.get(['savedPrompts', 'savedFolder', 'savedGenAgain', 'savedWaitTime', 'savedWordWrap'], (data) => {
         if (data.savedPrompts) imagePrompts.value = data.savedPrompts;
         if (data.savedFolder) outputFolder.value = data.savedFolder;
         if (data.savedGenAgain) generateAgainPrompt.value = data.savedGenAgain;
         if (data.savedWaitTime !== undefined) waitTime.value = data.savedWaitTime;
+        
+        if (data.savedWordWrap !== undefined) {
+            wordWrapCheck.checked = data.savedWordWrap;
+        }
+        
+        // Apply wrap state on load
+        imagePrompts.style.whiteSpace = wordWrapCheck.checked ? 'pre-wrap' : 'pre';
+        imagePrompts.style.overflowX = wordWrapCheck.checked ? 'hidden' : 'auto';
+        
         addLog("Ready. Awaiting commands.", "info");
     });
 
@@ -54,14 +64,23 @@ document.addEventListener('DOMContentLoaded', () => {
             savedPrompts: imagePrompts.value,
             savedFolder: outputFolder.value,
             savedGenAgain: generateAgainPrompt.value,
-            savedWaitTime: waitTime.value
+            savedWaitTime: waitTime.value,
+            savedWordWrap: wordWrapCheck.checked
         });
     };
+    
     imagePrompts.addEventListener('input', saveState);
     outputFolder.addEventListener('input', saveState);
     generateAgainPrompt.addEventListener('input', saveState);
     waitTime.addEventListener('input', saveState);
     
+    // Toggle Word Wrap
+    wordWrapCheck.addEventListener('change', () => {
+        imagePrompts.style.whiteSpace = wordWrapCheck.checked ? 'pre-wrap' : 'pre';
+        imagePrompts.style.overflowX = wordWrapCheck.checked ? 'hidden' : 'auto';
+        saveState();
+    });
+
     // Auto-format pasted paths to be relative to Downloads
     outputFolder.addEventListener('paste', (e) => {
         let pastedText = (e.clipboardData || window.clipboardData).getData('text');

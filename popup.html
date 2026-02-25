@@ -140,9 +140,15 @@
     <h2>Auto Image Generator</h2>
     
     <div class="form-group">
-        <label for="imagePrompts">Image Prompts (Type or Drag & Drop .txt / .md files)</label>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label for="imagePrompts" style="margin-bottom: 0;">Image Prompts (Type or Drag & Drop .txt / .md)</label>
+            <label class="checkbox-container" style="height: auto; font-size: 11px; margin-bottom: 0;">
+                <input type="checkbox" id="wordWrapCheck" checked>
+                Word Wrap
+            </label>
+        </div>
         <div class="textarea-container" id="dropZone">
-            <textarea id="imagePrompts" placeholder="Enter prompts here..."></textarea>
+            <textarea id="imagePrompts" placeholder="Enter prompts here..." style="white-space: pre-wrap;"></textarea>
             <div class="drag-overlay" id="dragOverlay">Drop file to load</div>
         </div>
     </div>
