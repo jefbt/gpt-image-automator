@@ -95,6 +95,12 @@
         .btn-danger:hover { background-color: rgba(255, 138, 138, 0.1); }
         .flex-1 { flex: 1; }
         
+        .input-group {
+            display: flex;
+            gap: 4px;
+            width: 100%;
+        }
+        
         /* Log Area Styles */
         .log-container {
             margin-top: 16px;
@@ -148,7 +154,10 @@
         </div>
         <div class="flex-1">
             <label for="outputFolder">Output Folder (Downloads Subfolder)</label>
-            <input type="text" id="outputFolder" placeholder="e.g. AI_Images">
+            <div class="input-group">
+                <input type="text" id="outputFolder" placeholder="e.g. AI_Images">
+                <button id="browseFolderBtn" type="button" title="Browse for folder" style="padding: 8px; margin: 0;">📁</button>
+            </div>
         </div>
         <label class="checkbox-container">
             <input type="checkbox" id="isVariation">

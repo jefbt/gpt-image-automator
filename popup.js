@@ -48,7 +48,71 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     imagePrompts.addEventListener('input', saveState);
     outputFolder.addEventListener('input', saveState);
+    
+    // Auto-format pasted paths to be relative to Downloads
+    outputFolder.addEventListener('paste', (e) => {
+        let pastedText = (e.clipboardData || window.clipboardData).getData('text');
+        const downloadsLower = 'downloads';
+        const idx = pastedText.toLowerCase().indexOf(downloadsLower);
+        
+        if (idx !== -1) {
+            e.preventDefault();
+            
+            // Extract everything after 'downloads'
+            let relativePath = pastedText.substring(idx + downloadsLower.length);
+            
+            // Remove leading slashes/backslashes
+            relativePath = relativePath.replace(/^[\\/]+/, '');
+            
+            // Normalize remaining backslashes to forward slashes
+            relativePath = relativePath.replace(/\\/g, '/');
+            
+            const start = outputFolder.selectionStart;
+            const end = outputFolder.selectionEnd;
+            outputFolder.value = outputFolder.value.substring(0, start) + relativePath + outputFolder.value.substring(end);
+            outputFolder.selectionStart = outputFolder.selectionEnd = start + relativePath.length;
+            
+            saveState();
+            addLog(`Pasted path auto-formatted to relative folder: "${relativePath || 'Root'}"`, "info");
+        }
+    });
+
     generateAgainPrompt.addEventListener('input', saveState);
+
+    // --- Folder Picker Button ---
+    document.getElementById('browseFolderBtn').addEventListener('click', async () => {
+        try {
+            // Request user to select a directory starting in downloads
+            const dirHandle = await window.showDirectoryPicker({ startIn: 'downloads' });
+            
+            // Browser security prevents extensions from reading the absolute or relative path.
+            // We only get the leaf folder name (e.g., 'br').
+            let suggestedPath = dirHandle.name;
+            
+            // If the user already typed a parent path (like '1kv/'), append the new folder to it
+            if (outputFolder.value && outputFolder.value.includes('/')) {
+                const parentDir = outputFolder.value.substring(0, outputFolder.value.lastIndexOf('/') + 1);
+                suggestedPath = parentDir + dirHandle.name;
+            }
+
+            // Ask the user to confirm or adjust the relative path due to browser limitations
+            const relativePath = prompt(
+                `Browser security hides the full folder path. We can only see the folder name: "${dirHandle.name}".\n\nIf this is inside a subfolder, please confirm/adjust the full relative path below (e.g., "1kv/${dirHandle.name}"):`, 
+                suggestedPath
+            );
+
+            if (relativePath !== null && relativePath.trim() !== '') {
+                outputFolder.value = relativePath.trim();
+                saveState();
+                addLog(`Selected folder path: "${outputFolder.value}". Note: Images will be saved inside 'Downloads/${outputFolder.value}' due to browser security restrictions.`, "info");
+            }
+        } catch (error) {
+            // Ignore AbortError (user clicked cancel)
+            if (error.name !== 'AbortError') {
+                addLog(`Folder picker error: ${error.message}`, "error");
+            }
+        }
+    });
 
     // --- Drag and Drop File Parsing ---
     dropZone.addEventListener('dragover', (e) => {
@@ -110,7 +174,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const varText = isVariation.checked ? 'Variation ' : '';
         
         const configLine = `##### ${varText}${num} "${folder}"\n`;
-        imagePrompts.value = configLine + imagePrompts.value;
+        
+        // Append to the bottom of the list
+        if (imagePrompts.value.length > 0 && !imagePrompts.value.endsWith('\n')) {
+            imagePrompts.value += '\n';
+        }
+        imagePrompts.value += configLine;
         
         startNumber.value = parseInt(startNumber.value) + 1;
         saveState();
@@ -134,7 +203,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Search for any open ChatGPT tab instead of the current window 
-        // (since the current window is now the standalone popup)
         chrome.tabs.query({url: "*://chatgpt.com/*"}, (tabs) => {
             if (!tabs || tabs.length === 0) {
                 addLog("Error: Could not find an open ChatGPT tab. Please open chatgpt.com.", "error");
