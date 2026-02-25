@@ -29,7 +29,16 @@
             flex-direction: column;
         }
         h2 { margin-top: 0; font-size: 18px; margin-bottom: 12px; }
-        .form-group { margin-bottom: 12px; }
+        
+        /* Flex scaling for the textarea parent */
+        .prompt-group { 
+            margin-bottom: 12px; 
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 100px;
+        }
+        
         label { display: block; font-size: 12px; margin-bottom: 4px; color: #aaa; }
         input[type="text"], input[type="number"], textarea {
             width: 100%;
@@ -41,11 +50,20 @@
             box-sizing: border-box;
             font-family: inherit;
         }
+        
+        /* Expanding textarea without a fixed height */
         textarea {
-            height: 120px;
-            resize: vertical;
+            height: auto;
+            flex-grow: 1;
+            resize: none;
         }
-        .textarea-container { position: relative; }
+        .textarea-container { 
+            position: relative; 
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
         .drag-overlay {
             position: absolute; top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(16, 163, 127, 0.2);
@@ -55,6 +73,7 @@
             align-items: center;
             justify-content: center;
             pointer-events: none;
+            z-index: 10;
         }
         .row {
             display: flex;
@@ -101,13 +120,12 @@
             width: 100%;
         }
         
-        /* Log Area Styles */
+        /* Fixed max-height for the log area */
         .log-container {
             margin-top: 16px;
-            flex-grow: 1;
             display: flex;
             flex-direction: column;
-            min-height: 150px;
+            flex-shrink: 0; /* Prevents it from crushing entirely */
         }
         .log-header {
             font-size: 12px;
@@ -117,7 +135,6 @@
             justify-content: space-between;
         }
         .log-area {
-            flex-grow: 1;
             background-color: var(--log-bg);
             border: 1px solid var(--border-color);
             border-radius: 6px;
@@ -126,6 +143,8 @@
             font-family: "Courier New", Courier, monospace;
             font-size: 11px;
             line-height: 1.4;
+            height: 78px; /* Approx 4 lines + padding */
+            max-height: 78px;
         }
         .log-entry { margin-bottom: 4px; word-wrap: break-word; }
         .log-info { color: #ccc; }
@@ -139,7 +158,7 @@
 <body>
     <h2>Auto Image Generator</h2>
     
-    <div class="form-group">
+    <div class="form-group prompt-group">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
             <label for="imagePrompts" style="margin-bottom: 0;">Image Prompts (Type or Drag & Drop .txt / .md)</label>
             <label class="checkbox-container" style="height: auto; font-size: 11px; margin-bottom: 0;">
