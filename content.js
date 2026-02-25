@@ -156,11 +156,11 @@ async function waitForGenerationAndGetImage() {
             clearTimeout(timeout);
         };
 
-        // Timeout after 3.5 minutes
+        // Timeout after 20 minutes
         timeout = setTimeout(() => {
             cleanup();
             resolve(null);
-        }, 3.5 * 60 * 1000);
+        }, 20 * 60 * 1000);
 
         checkInterval = setInterval(() => {
             const sendBtn = document.querySelector('button[data-testid="send-button"]');
