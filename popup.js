@@ -40,6 +40,30 @@ document.addEventListener('DOMContentLoaded', () => {
         addLog("Logs cleared.", "info");
     });
 
+    // --- Export Logs Button ---
+    document.getElementById('exportLogsBtn').addEventListener('click', () => {
+        const logEntries = Array.from(logArea.querySelectorAll('.log-entry')).map(entry => entry.textContent);
+        if (logEntries.length === 0) {
+            addLog("No logs to export.", "warn");
+            return;
+        }
+        
+        const logText = logEntries.join('\n');
+        const blob = new Blob([logText], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        a.download = `chatgpt-auto-gen-logs-${timestamp}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        addLog("Logs exported successfully.", "success");
+    });
+
     // Load saved state
     chrome.storage.local.get(['savedPrompts', 'savedFolder', 'savedGenAgain', 'savedWaitTime', 'savedWordWrap'], (data) => {
         if (data.savedPrompts) imagePrompts.value = data.savedPrompts;
