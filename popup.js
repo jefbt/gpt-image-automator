@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const logArea = document.getElementById('logArea');
     const countdownDisplay = document.getElementById('countdownDisplay');
     const wordWrapCheck = document.getElementById('wordWrapCheck');
+    const lineNumbers = document.getElementById('lineNumbers');
     
     // Main execution buttons
     const startAutomationBtn = document.getElementById('startAutomationBtn');
@@ -95,6 +96,8 @@ document.addEventListener('DOMContentLoaded', () => {
         imagePrompts.style.whiteSpace = wordWrapCheck.checked ? 'pre-wrap' : 'pre';
         imagePrompts.style.overflowX = wordWrapCheck.checked ? 'hidden' : 'auto';
         
+        updateLineNumbers();
+        
         addLog("Ready. Awaiting commands.", "info");
     });
 
@@ -111,7 +114,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
     
-    imagePrompts.addEventListener('input', saveState);
+    imagePrompts.addEventListener('input', () => {
+        saveState();
+        updateLineNumbers();
+    });
+    
+    // Sync scrolling of line numbers with textarea
+    imagePrompts.addEventListener('scroll', () => {
+        lineNumbers.scrollTop = imagePrompts.scrollTop;
+    });
+
+    // Recalculate wrapping sizes on window resize
+    window.addEventListener('resize', updateLineNumbers);
+    
     outputFolder.addEventListener('input', saveState);
     generateAgainPrompt.addEventListener('input', saveState);
     waitTime.addEventListener('input', saveState);
@@ -123,7 +138,76 @@ document.addEventListener('DOMContentLoaded', () => {
         imagePrompts.style.whiteSpace = wordWrapCheck.checked ? 'pre-wrap' : 'pre';
         imagePrompts.style.overflowX = wordWrapCheck.checked ? 'hidden' : 'auto';
         saveState();
+        updateLineNumbers();
     });
+
+    // --- Line Number Generation ---
+    function updateLineNumbers() {
+        const lines = imagePrompts.value.split('\n');
+        let html = '';
+        let promptIndex = 1;
+        
+        // Ensure mirror exists for wrap height calculation
+        let mirror = document.getElementById('textarea-mirror');
+        if (!mirror) {
+            mirror = document.createElement('div');
+            mirror.id = 'textarea-mirror';
+            document.body.appendChild(mirror);
+            
+            // Sync styles perfectly with textarea
+            const styles = window.getComputedStyle(imagePrompts);
+            mirror.style.fontFamily = styles.fontFamily;
+            mirror.style.fontSize = styles.fontSize;
+            mirror.style.lineHeight = '20px'; // Matching explicit CSS
+            mirror.style.padding = '0'; // measuring inner height
+            mirror.style.border = 'none';
+            mirror.style.boxSizing = 'border-box';
+            mirror.style.whiteSpace = 'pre-wrap';
+            mirror.style.wordWrap = 'break-word';
+            mirror.style.visibility = 'hidden';
+            mirror.style.position = 'absolute';
+            mirror.style.top = '-9999px';
+            mirror.style.left = '-9999px';
+        }
+        
+        // Match the inner width of textarea (excludes vertical scrollbar)
+        const paddingLeft = parseFloat(window.getComputedStyle(imagePrompts).paddingLeft) || 0;
+        const paddingRight = parseFloat(window.getComputedStyle(imagePrompts).paddingRight) || 0;
+        const innerWidth = imagePrompts.clientWidth - paddingLeft - paddingRight;
+        
+        if (innerWidth > 0) {
+            mirror.style.width = innerWidth + 'px';
+        }
+
+        const isWrap = wordWrapCheck.checked && innerWidth > 0;
+        const defaultLineHeight = 20;
+
+        for (let i = 0; i < lines.length; i++) {
+            let line = lines[i];
+            let numStr = '';
+            
+            // Only index lines that are not metadata and not completely empty
+            if (line.trim().startsWith('#####')) {
+                numStr = '';
+            } else if (line.trim() !== '') {
+                numStr = promptIndex++;
+            }
+
+            let heightStr = `height: ${defaultLineHeight}px;`;
+            if (isWrap) {
+                // measure height for wrapped lines
+                mirror.textContent = line || ' '; // fallback to space so it has 1 line height
+                let h = mirror.offsetHeight;
+                if (h > 0) {
+                    heightStr = `height: ${h}px;`;
+                }
+            }
+
+            html += `<div style="${heightStr} display: flex; align-items: flex-start; justify-content: flex-end;">${numStr}</div>`;
+        }
+        
+        lineNumbers.innerHTML = html;
+    }
 
     // Auto-format pasted paths to be relative to Downloads
     outputFolder.addEventListener('paste', (e) => {
@@ -206,6 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const parsedText = parseFileContent(content);
             imagePrompts.value += (imagePrompts.value ? '\n' : '') + parsedText + '\n';
             saveState();
+            updateLineNumbers();
             addLog(`Successfully loaded content from ${file.name}`, "success");
         };
         reader.readAsText(file);
@@ -248,6 +333,7 @@ document.addEventListener('DOMContentLoaded', () => {
         imagePrompts.value += configLine;
         
         saveState();
+        updateLineNumbers();
         addLog(`Added config header: ${configLine.trim()}`, "info");
     });
 
@@ -256,6 +342,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if(confirm('Are you sure you want to clear the list?')) {
             imagePrompts.value = '';
             saveState();
+            updateLineNumbers();
             addLog("Prompt list cleared.", "warn");
         }
     });

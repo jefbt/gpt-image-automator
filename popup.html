@@ -50,16 +50,46 @@
             font-family: inherit;
         }
         
-        textarea {
-            height: auto;
-            flex-grow: 1;
-            resize: none;
-        }
         .textarea-container { 
             position: relative; 
             flex-grow: 1;
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        textarea#imagePrompts {
+            height: auto;
+            flex-grow: 1;
+            resize: none;
+            background: transparent;
+            border: none;
+            outline: none;
+            border-radius: 0;
+            font-family: monospace;
+            font-size: 13px;
+            line-height: 20px;
+            margin: 0;
+            padding: 8px;
+        }
+
+        #lineNumbers {
+            padding: 8px 4px;
+            background-color: #1e1e1e;
+            color: #6b7280;
+            text-align: right;
+            font-family: monospace;
+            font-size: 13px;
+            line-height: 20px;
+            overflow: hidden;
+            border-right: 1px solid var(--border-color);
+            user-select: none;
+            width: 35px;
+            flex-shrink: 0;
+            box-sizing: border-box;
         }
         
         .drag-overlay {
@@ -186,6 +216,7 @@
             </div>
         </div>
         <div class="textarea-container" id="dropZone">
+            <div id="lineNumbers"></div>
             <textarea id="imagePrompts" placeholder="Enter prompts here..." style="white-space: pre-wrap;"></textarea>
             <div class="drag-overlay" id="dragOverlay">Drop file to load</div>
         </div>

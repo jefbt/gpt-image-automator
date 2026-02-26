@@ -3,8 +3,8 @@ chrome.action.onClicked.addListener((tab) => {
     chrome.windows.create({
         url: chrome.runtime.getURL("popup.html"),
         type: "popup",
-        width: 500,
-        height: 750
+        width: 600,
+        height: 600
     });
 });
 
