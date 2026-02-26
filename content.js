@@ -86,6 +86,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             request.retries, 
             request.retryTime
         );
+    } else if (request.action === "STOP_AUTOMATION") {
+        if (isRunning) {
+            sendLog("Stop signal received from UI. Attempting to halt immediately...", "warn");
+            isRunning = false; // Breaking loops in processPrompts and waiting intervals
+        }
     }
 });
 
@@ -96,14 +101,16 @@ async function processPrompts(promptsText, generateAgainText, waitTimeSeconds, m
     let isVariation = false;
     let totalPrompts = lines.filter(l => l.trim() && !l.trim().startsWith('#####')).length;
     let currentPromptIndex = 0;
+    let stoppedForcefully = false;
 
     sendLog(`Starting automation. Found ${totalPrompts} prompts to process. Wait time is ${waitTimeSeconds}s.`, "info");
 
     for (let i = 0; i < lines.length; i++) {
         let line = lines[i].trim();
         if (!line) continue;
+        
         if (!isRunning) {
-            sendLog("Automation forcefully stopped.", "warn");
+            stoppedForcefully = true;
             break;
         }
 
@@ -163,9 +170,10 @@ async function processPrompts(promptsText, generateAgainText, waitTimeSeconds, m
             sendLog(`Waiting for ChatGPT to finish generating (Timeout: 20 mins)...`, "info");
             const result = await waitForGenerationAndGetImage(initialTurnCount);
 
+            if (!isRunning) { break; } // Stopped during generation
+
             if (result && result.status === 'success') {
                 sendLog(`Image generation complete. Triggering download...`, "success");
-                // Variation is purposefully left out of the file name per request
                 const filename = `${currentFolder}/${currentPrefix}.png`;
                 
                 // Send to background to download
@@ -182,9 +190,14 @@ async function processPrompts(promptsText, generateAgainText, waitTimeSeconds, m
                 attempt++;
             }
         }
+        
+        if (!isRunning) {
+            stoppedForcefully = true;
+            break;
+        }
 
         // If it still failed after all retries
-        if (!success && isRunning) {
+        if (!success) {
             sendLog(`All ${maxRetries} retries failed. Creating fallback error image...`, "error");
 
             // Generate Fallback Error Image
@@ -231,8 +244,19 @@ async function processPrompts(promptsText, generateAgainText, waitTimeSeconds, m
 
     isRunning = false;
     updateCountdownUI("");
-    sendLog("Automation routine finished completely.", "success");
-    alert("Image Auto-Generation Complete!");
+    
+    // Log the actual state when terminating
+    if (stoppedForcefully) {
+        sendLog("Generation really stopped.", "error");
+    } else {
+        sendLog("Automation routine finished completely.", "success");
+        alert("Image Auto-Generation Complete!");
+    }
+
+    // Tell UI to reset buttons
+    try {
+        chrome.runtime.sendMessage({ action: "AUTOMATION_ENDED" }).catch(() => {});
+    } catch (e) {}
 }
 
 async function sendPromptToChatGPT(text) {
@@ -279,6 +303,13 @@ async function waitForGenerationAndGetImage(initialTurnCount) {
         }, 20 * 60 * 1000);
 
         checkInterval = setInterval(() => {
+            // Abort immediately if Stop was pressed during the waiting cycle
+            if (!isRunning) {
+                cleanup();
+                resolve({ status: 'error', message: 'Automation halted by user.' });
+                return;
+            }
+            
             const assistantTurns = document.querySelectorAll('article[data-turn="assistant"]');
             
             // Keep waiting if the new turn hasn't appeared yet

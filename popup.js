@@ -12,6 +12,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const logArea = document.getElementById('logArea');
     const countdownDisplay = document.getElementById('countdownDisplay');
     const wordWrapCheck = document.getElementById('wordWrapCheck');
+    
+    // Main execution buttons
+    const startAutomationBtn = document.getElementById('startAutomationBtn');
+    const stopAutomationBtn = document.getElementById('stopAutomationBtn');
 
     // Logging utility
     function addLog(message, type = 'info') {
@@ -21,6 +25,12 @@ document.addEventListener('DOMContentLoaded', () => {
         entry.textContent = `[${time}] ${message}`;
         logArea.appendChild(entry);
         logArea.scrollTop = logArea.scrollHeight; // Auto-scroll to bottom
+    }
+    
+    // Updates UI Button states
+    function setAutomationRunning(isRunning) {
+        startAutomationBtn.disabled = isRunning;
+        stopAutomationBtn.disabled = !isRunning;
     }
 
     // Listen for log messages and UI updates from background or content scripts
@@ -34,6 +44,8 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 countdownDisplay.style.display = 'none';
             }
+        } else if (request.action === "AUTOMATION_ENDED") {
+            setAutomationRunning(false); // Reset buttons safely when content.js terminates
         }
     });
 
@@ -144,20 +156,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Folder Picker Button ---
     document.getElementById('browseFolderBtn').addEventListener('click', async () => {
         try {
-            // Request user to select a directory starting in downloads
             const dirHandle = await window.showDirectoryPicker({ startIn: 'downloads' });
-            
-            // Browser security prevents extensions from reading the absolute or relative path.
-            // We only get the leaf folder name (e.g., 'br').
             let suggestedPath = dirHandle.name;
             
-            // If the user already typed a parent path (like '1kv/'), append the new folder to it
             if (outputFolder.value && outputFolder.value.includes('/')) {
                 const parentDir = outputFolder.value.substring(0, outputFolder.value.lastIndexOf('/') + 1);
                 suggestedPath = parentDir + dirHandle.name;
             }
 
-            // Ask the user to confirm or adjust the relative path due to browser limitations
             const relativePath = prompt(
                 `Browser security hides the full folder path. We can only see the folder name: "${dirHandle.name}".\n\nIf this is inside a subfolder, please confirm/adjust the full relative path below (e.g., "1kv/${dirHandle.name}"):`, 
                 suggestedPath
@@ -169,7 +175,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 addLog(`Selected folder path: "${outputFolder.value}". Note: Images will be saved inside 'Downloads/${outputFolder.value}' due to browser security restrictions.`, "info");
             }
         } catch (error) {
-            // Ignore AbortError (user clicked cancel)
             if (error.name !== 'AbortError') {
                 addLog(`Folder picker error: ${error.message}`, "error");
             }
@@ -237,13 +242,11 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const configLine = `##### ${varText}${num} "${folder}"\n`;
         
-        // Append to the bottom of the list
         if (imagePrompts.value.length > 0 && !imagePrompts.value.endsWith('\n')) {
             imagePrompts.value += '\n';
         }
         imagePrompts.value += configLine;
         
-        // Start number is no longer auto-incremented here
         saveState();
         addLog(`Added config header: ${configLine.trim()}`, "info");
     });
@@ -258,7 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- Start Automation ---
-    document.getElementById('startAutomationBtn').addEventListener('click', () => {
+    startAutomationBtn.addEventListener('click', () => {
         if (!imagePrompts.value.trim()) {
             addLog("Prompt list is empty. Nothing to generate.", "warn");
             return;
@@ -272,8 +275,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             
-            const targetTab = tabs[0]; // Target the first found ChatGPT tab
+            const targetTab = tabs[0];
             addLog("Initializing automation on ChatGPT...", "info");
+            
+            setAutomationRunning(true);
             
             chrome.tabs.sendMessage(targetTab.id, {
                 action: "START_AUTOMATION",
@@ -283,10 +288,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 retries: parseInt(retries.value, 10) || 0,
                 retryTime: parseInt(retryTime.value, 10) || 0
             }).catch((err) => {
-                // This catches the "Receiving end does not exist" error
                 addLog("Connection failed. Please REFRESH your ChatGPT tab and try again.", "error");
                 console.error("Message send error:", err);
+                setAutomationRunning(false);
             });
+        });
+    });
+
+    // --- Stop Automation ---
+    stopAutomationBtn.addEventListener('click', () => {
+        addLog("Stop button pressed. Sending stop signal to ChatGPT...", "warn");
+        
+        chrome.tabs.query({url: "*://chatgpt.com/*"}, (tabs) => {
+            if (tabs && tabs.length > 0) {
+                chrome.tabs.sendMessage(tabs[0].id, { action: "STOP_AUTOMATION" }).catch(() => {});
+            }
         });
     });
 });
