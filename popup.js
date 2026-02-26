@@ -13,10 +13,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const countdownDisplay = document.getElementById('countdownDisplay');
     const wordWrapCheck = document.getElementById('wordWrapCheck');
     const lineNumbers = document.getElementById('lineNumbers');
+    const startIndexInput = document.getElementById('startIndex'); // New Input
     
     // Main execution buttons
     const startAutomationBtn = document.getElementById('startAutomationBtn');
     const stopAutomationBtn = document.getElementById('stopAutomationBtn');
+
+    // Track text length to detect deletion
+    let previousTextLength = 0;
 
     // Logging utility
     function addLog(message, type = 'info') {
@@ -32,6 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function setAutomationRunning(isRunning) {
         startAutomationBtn.disabled = isRunning;
         stopAutomationBtn.disabled = !isRunning;
+        startIndexInput.disabled = isRunning;
     }
 
     // Listen for log messages and UI updates from background or content scripts
@@ -45,8 +50,15 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 countdownDisplay.style.display = 'none';
             }
+        } else if (request.action === "UPDATE_INDEX") {
+            startIndexInput.value = request.index;
+            saveState();
         } else if (request.action === "AUTOMATION_ENDED") {
-            setAutomationRunning(false); // Reset buttons safely when content.js terminates
+            setAutomationRunning(false);
+            if (request.finishedCompletely) {
+                startIndexInput.value = 1;
+                saveState();
+            }
         }
     });
 
@@ -80,13 +92,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Load saved state
-    chrome.storage.local.get(['savedPrompts', 'savedFolder', 'savedGenAgain', 'savedWaitTime', 'savedWordWrap', 'savedRetries', 'savedRetryTime'], (data) => {
-        if (data.savedPrompts) imagePrompts.value = data.savedPrompts;
+    chrome.storage.local.get(['savedPrompts', 'savedFolder', 'savedGenAgain', 'savedWaitTime', 'savedWordWrap', 'savedRetries', 'savedRetryTime', 'savedStartIndex'], (data) => {
+        if (data.savedPrompts) {
+            imagePrompts.value = data.savedPrompts;
+            previousTextLength = imagePrompts.value.length;
+        }
         if (data.savedFolder) outputFolder.value = data.savedFolder;
         if (data.savedGenAgain) generateAgainPrompt.value = data.savedGenAgain;
         if (data.savedWaitTime !== undefined) waitTime.value = data.savedWaitTime;
         if (data.savedRetries !== undefined) retries.value = data.savedRetries;
         if (data.savedRetryTime !== undefined) retryTime.value = data.savedRetryTime;
+        if (data.savedStartIndex !== undefined) startIndexInput.value = data.savedStartIndex;
         
         if (data.savedWordWrap !== undefined) {
             wordWrapCheck.checked = data.savedWordWrap;
@@ -110,14 +126,24 @@ document.addEventListener('DOMContentLoaded', () => {
             savedWaitTime: waitTime.value,
             savedRetries: retries.value,
             savedRetryTime: retryTime.value,
-            savedWordWrap: wordWrapCheck.checked
+            savedWordWrap: wordWrapCheck.checked,
+            savedStartIndex: startIndexInput.value
         });
     };
     
     imagePrompts.addEventListener('input', () => {
+        const currentLength = imagePrompts.value.length;
+        // Detect text deletion -> Reset Index to 1
+        if (currentLength < previousTextLength) {
+            startIndexInput.value = 1;
+        }
+        previousTextLength = currentLength;
+        
         saveState();
         updateLineNumbers();
     });
+
+    startIndexInput.addEventListener('input', saveState);
     
     // Sync scrolling of line numbers with textarea
     imagePrompts.addEventListener('scroll', () => {
@@ -289,6 +315,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const content = e.target.result;
             const parsedText = parseFileContent(content);
             imagePrompts.value += (imagePrompts.value ? '\n' : '') + parsedText + '\n';
+            previousTextLength = imagePrompts.value.length;
+            
             saveState();
             updateLineNumbers();
             addLog(`Successfully loaded content from ${file.name}`, "success");
@@ -331,6 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
             imagePrompts.value += '\n';
         }
         imagePrompts.value += configLine;
+        previousTextLength = imagePrompts.value.length;
         
         saveState();
         updateLineNumbers();
@@ -341,9 +370,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('clearListBtn').addEventListener('click', () => {
         if(confirm('Are you sure you want to clear the list?')) {
             imagePrompts.value = '';
+            previousTextLength = 0;
+            startIndexInput.value = 1;
+            
             saveState();
             updateLineNumbers();
-            addLog("Prompt list cleared.", "warn");
+            addLog("Prompt list cleared. Index reset to 1.", "warn");
         }
     });
 
@@ -363,13 +395,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             const targetTab = tabs[0];
-            addLog("Initializing automation on ChatGPT...", "info");
+            const activeIndex = parseInt(startIndexInput.value, 10) || 1;
+            
+            addLog(`Initializing automation on ChatGPT... (Starting from Index: ${activeIndex})`, "info");
             
             setAutomationRunning(true);
             
             chrome.tabs.sendMessage(targetTab.id, {
                 action: "START_AUTOMATION",
                 prompts: imagePrompts.value,
+                startIndex: activeIndex,
                 generateAgainText: generateAgainPrompt.value,
                 waitTime: parseInt(waitTime.value, 10) || 0,
                 retries: parseInt(retries.value, 10) || 0,

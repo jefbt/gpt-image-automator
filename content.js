@@ -81,6 +81,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         usedPrompts.clear();
         processPrompts(
             request.prompts, 
+            request.startIndex || 1,
             request.generateAgainText, 
             request.waitTime, 
             request.retries, 
@@ -94,7 +95,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
-async function processPrompts(promptsText, generateAgainText, waitTimeSeconds, maxRetries = 3, retryWaitTimeSeconds = 150) {
+async function processPrompts(promptsText, startIndex, generateAgainText, waitTimeSeconds, maxRetries = 3, retryWaitTimeSeconds = 150) {
     const lines = promptsText.split(/\r?\n/);
     let currentPrefix = "00001";
     let currentFolder = "AI_Images";
@@ -120,12 +121,26 @@ async function processPrompts(promptsText, generateAgainText, waitTimeSeconds, m
             isVariation = !!configMatch[1];
             currentPrefix = configMatch[2];
             currentFolder = configMatch[3];
-            sendLog(`Config Updated: Next file will be saved to '${currentFolder}' with prefix '${currentPrefix}'. Variation mode: ${isVariation}`, "info");
+            
+            // Only log config updates if we are actively processing (or about to process)
+            if (currentPromptIndex >= startIndex - 1) {
+                sendLog(`Config Updated: Next file will be saved to '${currentFolder}' with prefix '${currentPrefix}'. Variation mode: ${isVariation}`, "info");
+            }
             continue;
         }
 
         // It's a prompt line
         currentPromptIndex++;
+        
+        // --- Index Skipping Logic ---
+        // Pre-simulate prefix incrementing so the skipped prompts correctly offset the numbering
+        // for the items we actually want to generate.
+        if (currentPromptIndex < startIndex) {
+            usedPrompts.add(line);
+            currentPrefix = String(parseInt(currentPrefix) + 1).padStart(5, '0');
+            continue; 
+        }
+
         let finalPrompt = line;
         
         if (usedPrompts.has(line)) {
@@ -223,6 +238,11 @@ async function processPrompts(promptsText, generateAgainText, waitTimeSeconds, m
         // Always auto-increment the prefix for the next image
         currentPrefix = String(parseInt(currentPrefix) + 1).padStart(5, '0');
 
+        // Notify UI to advance the Index input
+        try {
+            chrome.runtime.sendMessage({ action: "UPDATE_INDEX", index: currentPromptIndex + 1 }).catch(() => {});
+        } catch (e) {}
+
         // Check if there are more valid prompts left to process before initiating the regular wait timer
         const hasMorePrompts = lines.slice(i + 1).some(l => l.trim() && !l.trim().startsWith('#####'));
 
@@ -248,15 +268,16 @@ async function processPrompts(promptsText, generateAgainText, waitTimeSeconds, m
     // Log the actual state when terminating
     if (stoppedForcefully) {
         sendLog("Generation really stopped.", "error");
+        try {
+            chrome.runtime.sendMessage({ action: "AUTOMATION_ENDED", finishedCompletely: false }).catch(() => {});
+        } catch (e) {}
     } else {
         sendLog("Automation routine finished completely.", "success");
         alert("Image Auto-Generation Complete!");
+        try {
+            chrome.runtime.sendMessage({ action: "AUTOMATION_ENDED", finishedCompletely: true }).catch(() => {});
+        } catch (e) {}
     }
-
-    // Tell UI to reset buttons
-    try {
-        chrome.runtime.sendMessage({ action: "AUTOMATION_ENDED" }).catch(() => {});
-    } catch (e) {}
 }
 
 async function sendPromptToChatGPT(text) {
