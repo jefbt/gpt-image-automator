@@ -5,6 +5,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const isVariation = document.getElementById('isVariation');
     const generateAgainPrompt = document.getElementById('generateAgainPrompt');
     const waitTime = document.getElementById('waitTime');
+    const retries = document.getElementById('retries');
+    const retryTime = document.getElementById('retryTime');
     const dropZone = document.getElementById('dropZone');
     const dragOverlay = document.getElementById('dragOverlay');
     const logArea = document.getElementById('logArea');
@@ -65,11 +67,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Load saved state
-    chrome.storage.local.get(['savedPrompts', 'savedFolder', 'savedGenAgain', 'savedWaitTime', 'savedWordWrap'], (data) => {
+    chrome.storage.local.get(['savedPrompts', 'savedFolder', 'savedGenAgain', 'savedWaitTime', 'savedWordWrap', 'savedRetries', 'savedRetryTime'], (data) => {
         if (data.savedPrompts) imagePrompts.value = data.savedPrompts;
         if (data.savedFolder) outputFolder.value = data.savedFolder;
         if (data.savedGenAgain) generateAgainPrompt.value = data.savedGenAgain;
         if (data.savedWaitTime !== undefined) waitTime.value = data.savedWaitTime;
+        if (data.savedRetries !== undefined) retries.value = data.savedRetries;
+        if (data.savedRetryTime !== undefined) retryTime.value = data.savedRetryTime;
         
         if (data.savedWordWrap !== undefined) {
             wordWrapCheck.checked = data.savedWordWrap;
@@ -89,6 +93,8 @@ document.addEventListener('DOMContentLoaded', () => {
             savedFolder: outputFolder.value,
             savedGenAgain: generateAgainPrompt.value,
             savedWaitTime: waitTime.value,
+            savedRetries: retries.value,
+            savedRetryTime: retryTime.value,
             savedWordWrap: wordWrapCheck.checked
         });
     };
@@ -97,6 +103,8 @@ document.addEventListener('DOMContentLoaded', () => {
     outputFolder.addEventListener('input', saveState);
     generateAgainPrompt.addEventListener('input', saveState);
     waitTime.addEventListener('input', saveState);
+    retries.addEventListener('input', saveState);
+    retryTime.addEventListener('input', saveState);
     
     // Toggle Word Wrap
     wordWrapCheck.addEventListener('change', () => {
@@ -271,7 +279,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 action: "START_AUTOMATION",
                 prompts: imagePrompts.value,
                 generateAgainText: generateAgainPrompt.value,
-                waitTime: parseInt(waitTime.value, 10) || 0
+                waitTime: parseInt(waitTime.value, 10) || 0,
+                retries: parseInt(retries.value, 10) || 0,
+                retryTime: parseInt(retryTime.value, 10) || 0
             }).catch((err) => {
                 // This catches the "Receiving end does not exist" error
                 addLog("Connection failed. Please REFRESH your ChatGPT tab and try again.", "error");

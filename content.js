@@ -79,11 +79,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
         isRunning = true;
         usedPrompts.clear();
-        processPrompts(request.prompts, request.generateAgainText, request.waitTime);
+        processPrompts(
+            request.prompts, 
+            request.generateAgainText, 
+            request.waitTime, 
+            request.retries, 
+            request.retryTime
+        );
     }
 });
 
-async function processPrompts(promptsText, generateAgainText, waitTimeSeconds) {
+async function processPrompts(promptsText, generateAgainText, waitTimeSeconds, maxRetries = 3, retryWaitTimeSeconds = 150) {
     const lines = promptsText.split(/\r?\n/);
     let currentPrefix = "00001";
     let currentFolder = "AI_Images";
@@ -123,36 +129,66 @@ async function processPrompts(promptsText, generateAgainText, waitTimeSeconds) {
 
         sendLog(`[${currentPromptIndex}/${totalPrompts}] Sending prompt to ChatGPT...`, "info");
         
-        // Track the current number of assistant responses before we send the new prompt
-        let initialTurnCount = document.querySelectorAll('article[data-turn="assistant"]').length;
-        
-        try {
-            await sendPromptToChatGPT(finalPrompt);
-        } catch (error) {
-            sendLog(`Failed to send prompt: ${error.message}`, "error");
-            continue; // Skip to next if UI interaction fails
-        }
-        
-        sendLog("Waiting for ChatGPT to finish generating (Timeout: 20 mins)...", "info");
-        const result = await waitForGenerationAndGetImage(initialTurnCount);
+        let attempt = 0;
+        let success = false;
+        let lastErrorMsg = "Unknown error";
 
-        if (result && result.status === 'success') {
-            sendLog(`Image generation complete. Triggering download...`, "success");
-            // Variation is purposefully left out of the file name per request
-            const filename = `${currentFolder}/${currentPrefix}.png`;
+        // Retry Loop
+        while (attempt <= maxRetries && !success && isRunning) {
+            if (attempt > 0) {
+                sendLog(`Retry ${attempt}/${maxRetries} for prompt [${currentPrefix}] in ${retryWaitTimeSeconds}s...`, "warn");
+                for (let w = retryWaitTimeSeconds; w > 0; w--) {
+                    if (!isRunning) break;
+                    updateCountdownUI(`Retry in: ${w}s`);
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+                updateCountdownUI(""); // Clear UI after countdown
+                if (!isRunning) break;
+                
+                sendLog(`[${currentPromptIndex}/${totalPrompts}] Re-sending prompt to ChatGPT (Retry ${attempt})...`, "info");
+            }
+
+            // Track the current number of assistant responses before we send the new prompt
+            let initialTurnCount = document.querySelectorAll('article[data-turn="assistant"]').length;
             
-            // Send to background to download
-            chrome.runtime.sendMessage({
-                action: "DOWNLOAD_IMAGE",
-                url: result.url,
-                filename: filename
-            });
-        } else {
-            const errorMsg = result ? result.message : "Unknown error or timeout.";
-            sendLog(`Generation failed. Creating fallback error image...`, "error");
+            try {
+                await sendPromptToChatGPT(finalPrompt);
+            } catch (error) {
+                sendLog(`Failed to send prompt: ${error.message}`, "error");
+                lastErrorMsg = error.message;
+                attempt++;
+                continue; // Skip directly to the next attempt if UI interaction fails
+            }
+            
+            sendLog(`Waiting for ChatGPT to finish generating (Timeout: 20 mins)...`, "info");
+            const result = await waitForGenerationAndGetImage(initialTurnCount);
+
+            if (result && result.status === 'success') {
+                sendLog(`Image generation complete. Triggering download...`, "success");
+                // Variation is purposefully left out of the file name per request
+                const filename = `${currentFolder}/${currentPrefix}.png`;
+                
+                // Send to background to download
+                chrome.runtime.sendMessage({
+                    action: "DOWNLOAD_IMAGE",
+                    url: result.url,
+                    filename: filename
+                });
+                
+                success = true; // Break the retry loop
+            } else {
+                lastErrorMsg = result ? result.message : "Unknown error or timeout.";
+                sendLog(`Generation failed on attempt ${attempt + 1}: ${lastErrorMsg}`, "warn");
+                attempt++;
+            }
+        }
+
+        // If it still failed after all retries
+        if (!success && isRunning) {
+            sendLog(`All ${maxRetries} retries failed. Creating fallback error image...`, "error");
 
             // Generate Fallback Error Image
-            const errorImageBase64 = createErrorImage(currentPrefix, currentFolder, finalPrompt, errorMsg);
+            const errorImageBase64 = createErrorImage(currentPrefix, currentFolder, finalPrompt, lastErrorMsg);
             const filenameImg = `${currentFolder}/${currentPrefix}-ERROR.png`;
             chrome.runtime.sendMessage({ 
                 action: "DOWNLOAD_IMAGE", 
@@ -161,7 +197,7 @@ async function processPrompts(promptsText, generateAgainText, waitTimeSeconds) {
             });
 
             // Generate Error Log Text File
-            const logContent = `Failed to generate image [${currentPrefix}] of project [${currentFolder}]\nPrompt: '${finalPrompt}'\nGPT Message: ${errorMsg}`;
+            const logContent = `Failed to generate image [${currentPrefix}] of project [${currentFolder}]\nPrompt: '${finalPrompt}'\nGPT Message: ${lastErrorMsg}`;
             const logDataUrl = 'data:text/plain;charset=utf-8,' + encodeURIComponent(logContent);
             const filenameLog = `${currentFolder}/${currentPrefix}-ERROR-log.txt`;
             chrome.runtime.sendMessage({ 
@@ -174,10 +210,10 @@ async function processPrompts(promptsText, generateAgainText, waitTimeSeconds) {
         // Always auto-increment the prefix for the next image
         currentPrefix = String(parseInt(currentPrefix) + 1).padStart(5, '0');
 
-        // Check if there are more valid prompts left to process before initiating the wait timer
+        // Check if there are more valid prompts left to process before initiating the regular wait timer
         const hasMorePrompts = lines.slice(i + 1).some(l => l.trim() && !l.trim().startsWith('#####'));
 
-        if (hasMorePrompts) {
+        if (hasMorePrompts && isRunning) {
             if (waitTimeSeconds > 0) {
                 sendLog(`Waiting ${waitTimeSeconds} seconds before sending the next prompt...`, "info");
                 for (let w = waitTimeSeconds; w > 0; w--) {
