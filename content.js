@@ -340,6 +340,29 @@ async function waitForGenerationAndGetImage(initialTurnCount) {
 
             const lastTurn = assistantTurns[assistantTurns.length - 1];
             
+            // NEW: Handle A/B Image Choice (Paragen Multi-Gen)
+            const multiGenContainer = lastTurn.querySelector('[data-testid="image-paragen-multigen"]');
+            if (multiGenContainer) {
+                if (!multiGenContainer.dataset.autoHandled) {
+                    multiGenContainer.dataset.autoHandled = "true";
+                    const choiceBtns = multiGenContainer.querySelectorAll('button.btn-secondary');
+                    const skipBtn = multiGenContainer.querySelector('button.text-token-text-tertiary');
+                    
+                    if (choiceBtns && choiceBtns.length >= 2) {
+                        const choiceIndex = Math.random() < 0.5 ? 0 : 1;
+                        sendLog(`Image choice prompt detected! Randomly selecting Option ${choiceIndex + 1}...`, "info");
+                        choiceBtns[choiceIndex].click();
+                    } else if (skipBtn) {
+                        sendLog(`Image choice prompt detected, but options not found. Clicking Skip...`, "warn");
+                        skipBtn.click();
+                    } else {
+                        sendLog(`Image choice prompt detected, but no buttons found to click!`, "error");
+                    }
+                    finishedTime = null; // Reset extraction timer to wait for the final choice UI
+                }
+                return; // Skip standard processing while in choice mode
+            }
+
             const copyBtn = lastTurn.querySelector('button[data-testid="copy-turn-action-button"]');
             const stopBtn = document.querySelector('button[data-testid="stop-button"]');
             
