@@ -571,18 +571,13 @@ async function waitForGenerationAndGetImage(initialTurnCount) {
             if (multiGenContainer) {
                 if (!multiGenContainer.dataset.autoHandled) {
                     multiGenContainer.dataset.autoHandled = "true";
-                    const choiceBtns = multiGenContainer.querySelectorAll('button.btn-secondary');
                     const skipBtn = multiGenContainer.querySelector('button.text-token-text-tertiary');
                     
-                    if (choiceBtns && choiceBtns.length >= 2) {
-                        const choiceIndex = Math.random() < 0.5 ? 0 : 1;
-                        sendLog(`Image choice prompt detected! Randomly selecting Option ${choiceIndex + 1}...`, "info");
-                        choiceBtns[choiceIndex].click();
-                    } else if (skipBtn) {
-                        sendLog(`Image choice prompt detected, but options not found. Clicking Skip...`, "warn");
+                    if (skipBtn) {
+                        sendLog(`Image choice prompt detected. Clicking Skip button...`, "info");
                         skipBtn.click();
                     } else {
-                        sendLog(`Image choice prompt detected, but no buttons found to click!`, "error");
+                        sendLog(`Image choice prompt detected, but Skip button not found!`, "error");
                     }
                     finishedTime = null; // Reset extraction timer to wait for the final choice UI
                 }
