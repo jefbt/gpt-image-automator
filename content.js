@@ -257,7 +257,7 @@ async function processPrompts(promptsText, startIndex, generateAgainText, waitTi
             // NEW: After all standard retries fail, actively ask ChatGPT for the limitation time.
             if (attempt > maxRetries) {
                 sendLog(`All ${maxRetries} retries failed. Asking ChatGPT for exact wait time...`, "warn");
-                let initialTurnCount = document.querySelectorAll('article[data-turn="assistant"]').length;
+                let initialTurnCount = document.querySelectorAll('[data-turn="assistant"]').length;
                 try {
                     await sendPromptToChatGPT("How much time for the next image generation? Please tell me in the format DD:HH:MM. If it's not a time limitation, please say 'NO'");
                 } catch (error) {
@@ -332,7 +332,7 @@ async function processPrompts(promptsText, startIndex, generateAgainText, waitTi
             }
 
             // Track the current number of assistant responses before we send the new prompt
-            let initialTurnCount = document.querySelectorAll('article[data-turn="assistant"]').length;
+            let initialTurnCount = document.querySelectorAll('[data-turn="assistant"]').length;
             
             try {
                 await sendPromptToChatGPT(finalPrompt);
@@ -549,7 +549,7 @@ async function waitForGenerationAndGetImage(initialTurnCount) {
                     if (closeBtn) closeBtn.click(); // Dismiss the banner immediately
                     
                     // If it hasn't generated a new turn yet, abort waiting and resolve immediately to start wait pause
-                    if (document.querySelectorAll('article[data-turn="assistant"]').length <= initialTurnCount) {
+                    if (document.querySelectorAll('[data-turn="assistant"]').length <= initialTurnCount) {
                         cleanup();
                         resolve({ status: 'rate_limited', timeStr: lastRateLimitTimeStr });
                         return;
@@ -557,7 +557,7 @@ async function waitForGenerationAndGetImage(initialTurnCount) {
                 }
             }
             
-            const assistantTurns = document.querySelectorAll('article[data-turn="assistant"]');
+            const assistantTurns = document.querySelectorAll('[data-turn="assistant"]');
             
             // Keep waiting if the new turn hasn't appeared yet
             if (assistantTurns.length <= initialTurnCount) {
