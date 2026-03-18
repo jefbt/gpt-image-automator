@@ -577,7 +577,14 @@ async function waitForGenerationAndGetImage(initialTurnCount) {
                         sendLog(`Image choice prompt detected. Clicking Skip button...`, "info");
                         skipBtn.click();
                     } else {
-                        sendLog(`Image choice prompt detected, but Skip button not found!`, "error");
+                        // No Skip button - click the first/preferred choice button
+                        const preferBtn = multiGenContainer.querySelector('[data-testid="paragen-prefer-response-button"]');
+                        if (preferBtn) {
+                            sendLog(`Image choice prompt detected. Clicking preferred response button...`, "info");
+                            preferBtn.click();
+                        } else {
+                            sendLog(`Image choice prompt detected, but no choice button found!`, "error");
+                        }
                     }
                     finishedTime = null; // Reset extraction timer to wait for the final choice UI
                 }
